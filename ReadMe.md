@@ -1,3 +1,4 @@
+# Create tables
 aws dynamodb create-table \
     --table-name Events \
     --attribute-definitions AttributeName=aggregateId,AttributeType=S AttributeName=eventNumber,AttributeType=N \

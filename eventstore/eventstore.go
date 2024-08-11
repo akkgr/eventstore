@@ -3,6 +3,7 @@ package eventstore
 import (
 	"context"
 	"errors"
+	"sync"
 	"time"
 )
 
@@ -87,15 +88,44 @@ func (es *EventStore) Append(event Event, ctx context.Context) error {
 }
 
 func (es *EventStore) LoadEvents(aggregateID string, ctx context.Context) ([]Event, error) {
-	aggregate, err := es.reader.GetAggregate(aggregateID, ctx)
-	if err != nil {
-		return nil, err
+	var wg sync.WaitGroup
+	eventChan := make(chan []Event, 1)
+	aggregateChan := make(chan Aggregate, 1)
+	errChan := make(chan error, 2)
+
+	wg.Add(2)
+
+	go func() {
+		defer wg.Done()
+		aggregate, err := es.reader.GetAggregate(aggregateID, ctx)
+		if err != nil {
+			errChan <- err
+			return
+		}
+		aggregateChan <- aggregate
+	}()
+
+	go func() {
+		defer wg.Done()
+		events, err := es.reader.GetEvents(aggregateID, ctx)
+		if err != nil {
+			errChan <- err
+			return
+		}
+		eventChan <- events
+	}()
+
+	wg.Wait()
+	close(eventChan)
+	close(aggregateChan)
+	close(errChan)
+
+	if len(errChan) > 0 {
+		return nil, <-errChan
 	}
 
-	events, err := es.reader.GetEvents(aggregateID, ctx)
-	if err != nil {
-		return nil, err
-	}
+	aggregate := <-aggregateChan
+	events := <-eventChan
 
 	return append(events, aggregate.LastEvent), nil
 }
