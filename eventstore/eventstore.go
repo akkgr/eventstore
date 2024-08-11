@@ -24,6 +24,15 @@ type Event struct {
 	Data          []byte    `json:"data" dynamodbav:"data"`
 }
 
+type Snapshot struct {
+	AggregateID    string    `json:"aggregateId" dynamodbav:"aggregateId"`
+	SnapshotNumber int       `json:"snapshotNumber" dynamodbav:"snapshotNumber"`
+	AggregateType  string    `json:"aggregateType" dynamodbav:"aggregateType"`
+	EventNumber    int       `json:"eventNumber" dynamodbav:"eventNumber"`
+	Created        time.Time `json:"created" dynamodbav:"created"`
+	Data           []byte    `json:"data" dynamodbav:"data"`
+}
+
 type EventStoreAppender interface {
 	Append(event Event, ctx context.Context) error
 }
@@ -40,6 +49,7 @@ type EventStoreReader interface {
 type EventStoreWriter interface {
 	AppendAggregate(aggregate Aggregate, ctx context.Context) error
 	AppendEvent(event Event, ctx context.Context) error
+	AppendSnapshot(snapshot Snapshot, ctx context.Context) error
 }
 
 type EventStore struct {
@@ -127,5 +137,9 @@ func (es *EventStore) LoadEvents(aggregateID string, ctx context.Context) ([]Eve
 	aggregate := <-aggregateChan
 	events := <-eventChan
 
-	return append(events, aggregate.LastEvent), nil
+	if aggregate.LastEvent.EventNumber == 0 {
+		return events, nil
+	} else {
+		return append(events, aggregate.LastEvent), nil
+	}
 }

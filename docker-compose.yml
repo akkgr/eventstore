@@ -1,0 +1,29 @@
+services:
+  dynamo:
+    image: amazon/dynamodb-local
+    command:
+      [
+        "-jar",
+        "DynamoDBLocal.jar",
+        "-sharedDb"
+      ]
+    hostname: dynamo
+    container_name: dynamodb-local
+    restart: always
+    environment:
+      - reschedule=on-node-failure
+    ports:
+      - 8000:8000
+  dynamodb-manager:
+    depends_on:
+      - dynamo
+    image: aaronshaf/dynamodb-admin
+    ports:
+      - "8080:8001"
+    environment:
+      DYNAMO_ENDPOINT: "http://dynamodb-local:8000"
+      AWS_REGION: "us-west-1"
+      AWS_ACCESS_KEY_ID: 0
+      AWS_SECRET_ACCESS_KEY: 0
+    privileged: true
+    restart: always

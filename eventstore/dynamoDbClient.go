@@ -2,7 +2,6 @@ package eventstore
 
 import (
 	"context"
-	"errors"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/feature/dynamodb/attributevalue"
@@ -38,6 +37,18 @@ func (dbc *DynamoDBClient) AppendAggregate(aggregate Aggregate, ctx context.Cont
 	return err
 }
 
+func (dbc *DynamoDBClient) AppendSnapshot(snapshot Snapshot, ctx context.Context) error {
+	item, err := attributevalue.MarshalMap(snapshot)
+	if err != nil {
+		return err
+	}
+
+	_, err = dbc.DynamoDbClient.PutItem(ctx, &dynamodb.PutItemInput{
+		TableName: aws.String(dbc.SnapshotsTable), Item: item,
+	})
+	return err
+}
+
 func (dbc *DynamoDBClient) AppendEvent(event Event, ctx context.Context) error {
 	item, err := attributevalue.MarshalMap(event)
 	if err != nil {
@@ -52,19 +63,17 @@ func (dbc *DynamoDBClient) AppendEvent(event Event, ctx context.Context) error {
 
 func (dbc *DynamoDBClient) GetAggregate(aggregateID string, ctx context.Context) (Aggregate, error) {
 	aggregate := Aggregate{}
+
 	id, err := attributevalue.Marshal(aggregateID)
 	if err != nil {
 		return aggregate, err
 	}
+
 	key := map[string]types.AttributeValue{"aggregateId": id}
 	response, err := dbc.DynamoDbClient.GetItem(ctx, &dynamodb.GetItemInput{
 		Key: key, TableName: aws.String(dbc.AggregateTable),
 	})
 	if err != nil {
-		var notFoundEx *types.ResourceNotFoundException
-		if errors.As(err, &notFoundEx) {
-			return aggregate, nil
-		}
 		return aggregate, err
 	}
 

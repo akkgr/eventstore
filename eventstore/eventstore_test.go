@@ -83,6 +83,17 @@ func (m *mockEventStoreWriter) AppendEvent(event eventstore.Event, ctx context.C
 	}
 }
 
+func (m *mockEventStoreWriter) AppendSnapshot(snapshot eventstore.Snapshot, ctx context.Context) error {
+	switch snapshot.AggregateID {
+	case "1":
+		return nil
+	case "2":
+		return errors.New("some error")
+	default:
+		return nil
+	}
+}
+
 func TestAppendSuccessCreate(t *testing.T) {
 	// create a new event store
 	es := eventstore.NewEventStore(&mockEventStoreReader{}, &mockEventStoreWriter{})
