@@ -102,7 +102,7 @@ func (es *EventStore) Append(event Event, ctx context.Context) error {
 	return err
 }
 
-func (es *EventStore) LoadEvents(aggregateID string, ctx context.Context) ([]Event, error) {
+func (es *EventStore) LoadEvents(id AggregateId, ctx context.Context) ([]Event, error) {
 	var wg sync.WaitGroup
 	eventChan := make(chan []Event, 1)
 	aggregateChan := make(chan Aggregate, 1)
@@ -112,7 +112,7 @@ func (es *EventStore) LoadEvents(aggregateID string, ctx context.Context) ([]Eve
 
 	go func() {
 		defer wg.Done()
-		aggregate, err := es.reader.GetAggregate(aggregateID, ctx)
+		aggregate, err := es.reader.GetAggregate(id, ctx)
 		if err != nil {
 			errChan <- err
 			return
@@ -122,7 +122,7 @@ func (es *EventStore) LoadEvents(aggregateID string, ctx context.Context) ([]Eve
 
 	go func() {
 		defer wg.Done()
-		events, err := es.reader.GetEvents(aggregateID, ctx)
+		events, err := es.reader.GetEvents(id, ctx)
 		if err != nil {
 			errChan <- err
 			return

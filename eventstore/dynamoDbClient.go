@@ -61,15 +61,15 @@ func (dbc *DynamoDBClient) AppendEvent(event Event, ctx context.Context) error {
 	return err
 }
 
-func (dbc *DynamoDBClient) GetAggregate(aggregateID string, ctx context.Context) (Aggregate, error) {
+func (dbc *DynamoDBClient) GetAggregate(id AggregateId, ctx context.Context) (Aggregate, error) {
 	aggregate := Aggregate{}
 
-	id, err := attributevalue.Marshal(aggregateID)
+	marshaledId, err := attributevalue.Marshal(id)
 	if err != nil {
 		return aggregate, err
 	}
 
-	key := map[string]types.AttributeValue{"aggregateId": id}
+	key := map[string]types.AttributeValue{"aggregateId": marshaledId}
 	response, err := dbc.DynamoDbClient.GetItem(ctx, &dynamodb.GetItemInput{
 		Key: key, TableName: aws.String(dbc.AggregateTable),
 	})
@@ -85,7 +85,7 @@ func (dbc *DynamoDBClient) GetAggregate(aggregateID string, ctx context.Context)
 	return aggregate, err
 }
 
-func (dbc *DynamoDBClient) GetEvents(aggregateID string, ctx context.Context) ([]Event, error) {
+func (dbc *DynamoDBClient) GetEvents(id AggregateId, ctx context.Context) ([]Event, error) {
 	var err error
 	var response *dynamodb.QueryOutput
 	var events []Event
@@ -97,7 +97,7 @@ func (dbc *DynamoDBClient) GetEvents(aggregateID string, ctx context.Context) ([
 			"#pk": "aggregateId",
 		},
 		ExpressionAttributeValues: map[string]types.AttributeValue{
-			":pk": &types.AttributeValueMemberS{Value: aggregateID},
+			":pk": &types.AttributeValueMemberS{Value: id},
 		},
 	})
 	for queryPaginator.HasMorePages() {
