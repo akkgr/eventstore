@@ -2,8 +2,6 @@ package core
 
 import "time"
 
-type Timestamp = time.Time
-
 type Timer interface {
 	Now() Timestamp
 }
