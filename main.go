@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/akkgr/eventstore/core"
 	"github.com/akkgr/eventstore/eventstore"
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/config"
@@ -16,10 +17,6 @@ import (
 func main() {
 	cfg, err := config.LoadDefaultConfig(context.TODO(),
 		config.WithRegion("localhost"),
-		config.WithEndpointResolverWithOptions(aws.EndpointResolverWithOptionsFunc(
-			func(service, region string, options ...interface{}) (aws.Endpoint, error) {
-				return aws.Endpoint{URL: "http://localhost:8000"}, nil
-			})),
 		config.WithCredentialsProvider(credentials.StaticCredentialsProvider{
 			Value: aws.Credentials{
 				AccessKeyID: "abcd", SecretAccessKey: "a1b2c3", SessionToken: "",
@@ -33,11 +30,13 @@ func main() {
 	}
 
 	// Create a new DynamoDB client
-	client := dynamodb.NewFromConfig(cfg)
+	client := dynamodb.NewFromConfig(cfg, func(o *dynamodb.Options) {
+		o.BaseEndpoint = aws.String("http://localhost:8000")
+	})
 
 	dbc := eventstore.NewDynamoDBClient(client)
 
-	es := eventstore.NewEventStore(dbc, dbc)
+	es := eventstore.NewEventStore(dbc, dbc, core.TimerUTC{})
 
 	events, err := es.LoadEvents("123", context.Background())
 	if err != nil {
@@ -48,21 +47,21 @@ func main() {
 	num := len(events)
 	if num > 0 {
 		err = es.Append(eventstore.Event{
-			AggregateID:   "123",
-			EventNumber:   num + 1,
-			AggregateType: "Customer",
-			EventName:     "CustomerUpdated",
-			Created:       time.Now(),
-			Data:          json.RawMessage(`{"name": "test test"}`),
+			Id:      "123",
+			Version: num + 1,
+			Entity:  "Customer",
+			Action:  "CustomerUpdated",
+			Created: time.Now(),
+			Data:    json.RawMessage(`{"name": "test test"}`),
 		}, context.Background())
 	} else {
 		err = es.Append(eventstore.Event{
-			AggregateID:   "123",
-			EventNumber:   1,
-			AggregateType: "Customer",
-			EventName:     "CustomerCreated",
-			Created:       time.Now(),
-			Data:          json.RawMessage(`{"name": "test"}`),
+			Id:      "123",
+			Version: 1,
+			Entity:  "Customer",
+			Action:  "CustomerCreated",
+			Created: time.Now(),
+			Data:    json.RawMessage(`{"name": "test"}`),
 		}, context.Background())
 	}
 	if err != nil {

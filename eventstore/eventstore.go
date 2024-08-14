@@ -4,33 +4,38 @@ import (
 	"context"
 	"errors"
 	"sync"
-	"time"
+
+	"github.com/akkgr/eventstore/core"
 )
 
-type Aggregate struct {
-	AggregateID   string    `json:"aggregateId" dynamodbav:"aggregateId"`
-	AggregateType string    `json:"aggregateType" dynamodbav:"aggregateType"`
-	LastEvent     Event     `json:"lastEvent" dynamodbav:"lastEvent"`
-	Created       time.Time `json:"created" dynamodbav:"created"`
-	Updated       time.Time `json:"updated" dynamodbav:"updated"`
-}
+type AggregateId = string
+type AggregateType = string
+type EventName = string
+type EventNumber = int
+type Payload = []byte
 
 type Event struct {
-	AggregateID   string    `json:"aggregateId" dynamodbav:"aggregateId"`
-	EventNumber   int       `json:"eventNumber" dynamodbav:"eventNumber"`
-	AggregateType string    `json:"aggregateType" dynamodbav:"aggregateType"`
-	EventName     string    `json:"eventName" dynamodbav:"eventName"`
-	Created       time.Time `json:"created" dynamodbav:"created"`
-	Data          []byte    `json:"data" dynamodbav:"data"`
+	Id      AggregateId    `json:"id" dynamodbav:"id"`
+	Version EventNumber    `json:"version" dynamodbav:"version"`
+	Entity  AggregateType  `json:"entity" dynamodbav:"entity"`
+	Action  EventName      `json:"action" dynamodbav:"action"`
+	Created core.Timestamp `json:"created" dynamodbav:"created"`
+	Data    Payload        `json:"data" dynamodbav:"data"`
+}
+
+type Aggregate struct {
+	Id        AggregateId    `json:"id" dynamodbav:"id"`
+	Entity    AggregateType  `json:"entity" dynamodbav:"entity"`
+	LastEvent Event          `json:"lastEvent" dynamodbav:"lastEvent"`
+	Created   core.Timestamp `json:"created" dynamodbav:"created"`
 }
 
 type Snapshot struct {
-	AggregateID    string    `json:"aggregateId" dynamodbav:"aggregateId"`
-	SnapshotNumber int       `json:"snapshotNumber" dynamodbav:"snapshotNumber"`
-	AggregateType  string    `json:"aggregateType" dynamodbav:"aggregateType"`
-	EventNumber    int       `json:"eventNumber" dynamodbav:"eventNumber"`
-	Created        time.Time `json:"created" dynamodbav:"created"`
-	Data           []byte    `json:"data" dynamodbav:"data"`
+	Id      AggregateId    `json:"id" dynamodbav:"id"`
+	Version EventNumber    `json:"varsion" dynamodbav:"version"`
+	Entity  AggregateType  `json:"entity" dynamodbav:"entity"`
+	Created core.Timestamp `json:"created" dynamodbav:"created"`
+	Data    Payload        `json:"data" dynamodbav:"data"`
 }
 
 type EventStoreAppender interface {
@@ -38,12 +43,12 @@ type EventStoreAppender interface {
 }
 
 type EventStoreLoader interface {
-	LoadEvents(aggregateID string, ctx context.Context) ([]Event, error)
+	LoadEvents(id AggregateId, ctx context.Context) ([]Event, error)
 }
 
 type EventStoreReader interface {
-	GetAggregate(aggregateID string, ctx context.Context) (Aggregate, error)
-	GetEvents(aggregateID string, ctx context.Context) ([]Event, error)
+	GetAggregate(id AggregateId, ctx context.Context) (Aggregate, error)
+	GetEvents(id AggregateId, ctx context.Context) ([]Event, error)
 }
 
 type EventStoreWriter interface {
@@ -55,25 +60,27 @@ type EventStoreWriter interface {
 type EventStore struct {
 	reader EventStoreReader
 	writer EventStoreWriter
+	timer  core.Timer
 }
 
-func NewEventStore(reader EventStoreReader, writer EventStoreWriter) *EventStore {
+func NewEventStore(reader EventStoreReader, writer EventStoreWriter, timer core.Timer) *EventStore {
 	return &EventStore{
 		reader: reader,
 		writer: writer,
+		timer:  timer,
 	}
 }
 
 func (es *EventStore) Append(event Event, ctx context.Context) error {
 	// get the last event
-	aggregate, err := es.reader.GetAggregate(event.AggregateID, ctx)
+	aggregate, err := es.reader.GetAggregate(event.Id, ctx)
 	if err != nil {
 		return err
 	}
 
-	if aggregate.LastEvent.EventNumber != 0 {
+	if aggregate.LastEvent.Version != 0 {
 		// Check if the version of the last event is one less than the current event
-		if aggregate.LastEvent.EventNumber != event.EventNumber-1 {
+		if aggregate.LastEvent.Version != event.Version-1 {
 			return errors.New("version mismatch")
 		}
 
@@ -82,12 +89,10 @@ func (es *EventStore) Append(event Event, ctx context.Context) error {
 		if err != nil {
 			return err
 		}
-		aggregate.Updated = time.Now()
-
 	} else {
-		aggregate.AggregateID = event.AggregateID
-		aggregate.AggregateType = event.AggregateType
-		aggregate.Created = time.Now()
+		aggregate.Id = event.Id
+		aggregate.Entity = event.Entity
+		aggregate.Created = es.timer.Now()
 
 	}
 
@@ -137,7 +142,7 @@ func (es *EventStore) LoadEvents(aggregateID string, ctx context.Context) ([]Eve
 	aggregate := <-aggregateChan
 	events := <-eventChan
 
-	if aggregate.LastEvent.EventNumber == 0 {
+	if aggregate.LastEvent.Version == 0 {
 		return events, nil
 	} else {
 		return append(events, aggregate.LastEvent), nil

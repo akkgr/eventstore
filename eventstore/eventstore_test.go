@@ -9,47 +9,54 @@ import (
 	"github.com/akkgr/eventstore/eventstore"
 )
 
+// mock Timer
+type mockTimer struct {
+}
+
+func (m *mockTimer) Now() time.Time {
+	return time.Date(2000, 3, 15, 0, 0, 0, 0, time.UTC)
+}
+
 // mock EventStoreReader
 type mockEventStoreReader struct {
 }
 
-func (m *mockEventStoreReader) GetAggregate(aggregateID string, ctx context.Context) (eventstore.Aggregate, error) {
-	switch aggregateID {
+func (m *mockEventStoreReader) GetAggregate(id eventstore.AggregateId, ctx context.Context) (eventstore.Aggregate, error) {
+	switch id {
 	case "1":
 		return eventstore.Aggregate{}, nil
 	case "2":
 		return eventstore.Aggregate{}, errors.New("some error")
 	default:
 		return eventstore.Aggregate{
-			AggregateID:   aggregateID,
-			AggregateType: "test",
+			Id:     id,
+			Entity: "test",
 			LastEvent: eventstore.Event{
-				AggregateID:   aggregateID,
-				AggregateType: "test",
-				EventNumber:   2,
-				EventName:     "test",
-				Created:       time.Date(2000, 3, 15, 0, 0, 0, 0, time.UTC),
-				Data:          []byte("test"),
+				Id:      id,
+				Entity:  "test",
+				Version: 2,
+				Action:  "test",
+				Created: time.Date(2000, 3, 15, 0, 0, 0, 0, time.UTC),
+				Data:    []byte("test"),
 			},
 			Created: time.Date(2000, 3, 15, 0, 0, 0, 0, time.UTC),
-			Updated: time.Date(2000, 3, 15, 0, 0, 0, 0, time.UTC),
 		}, nil
 	}
 }
 
-func (m *mockEventStoreReader) GetEvents(aggregateID string, ctx context.Context) ([]eventstore.Event, error) {
-	switch aggregateID {
+func (m *mockEventStoreReader) GetEvents(id eventstore.AggregateId, ctx context.Context) ([]eventstore.Event, error) {
+	switch id {
 	case "1":
 		return nil, errors.New("some error")
 	default:
 		return []eventstore.Event{
 			{
-				AggregateID:   "1",
-				AggregateType: "test",
-				EventNumber:   1,
-				EventName:     "test",
-				Created:       time.Date(2000, 3, 15, 0, 0, 0, 0, time.UTC),
-				Data:          []byte("test"),
+				Id:      "1",
+				Entity:  "test",
+				Version: 1,
+				Action:  "test",
+				Created: time.Date(2000, 3, 15, 0, 0, 0, 0, time.UTC),
+				Data:    []byte("test"),
 			},
 		}, nil
 	}
@@ -60,7 +67,7 @@ type mockEventStoreWriter struct {
 }
 
 func (m *mockEventStoreWriter) AppendAggregate(aggregate eventstore.Aggregate, ctx context.Context) error {
-	switch aggregate.AggregateID {
+	switch aggregate.Id {
 	case "1":
 		return nil
 	case "2":
@@ -71,7 +78,7 @@ func (m *mockEventStoreWriter) AppendAggregate(aggregate eventstore.Aggregate, c
 }
 
 func (m *mockEventStoreWriter) AppendEvent(event eventstore.Event, ctx context.Context) error {
-	switch event.AggregateID {
+	switch event.Id {
 	case "1":
 		return nil
 	case "2":
@@ -84,7 +91,7 @@ func (m *mockEventStoreWriter) AppendEvent(event eventstore.Event, ctx context.C
 }
 
 func (m *mockEventStoreWriter) AppendSnapshot(snapshot eventstore.Snapshot, ctx context.Context) error {
-	switch snapshot.AggregateID {
+	switch snapshot.Id {
 	case "1":
 		return nil
 	case "2":
@@ -94,19 +101,27 @@ func (m *mockEventStoreWriter) AppendSnapshot(snapshot eventstore.Snapshot, ctx 
 	}
 }
 
+func CreateEventStore() *eventstore.EventStore {
+	return eventstore.NewEventStore(&mockEventStoreReader{}, &mockEventStoreWriter{}, &mockTimer{})
+}
+
+func CreatedEvent(id string, version int) eventstore.Event {
+	return eventstore.Event{
+		Id:      id,
+		Entity:  "test",
+		Version: version,
+		Action:  "test",
+		Created: time.Date(2000, 3, 15, 0, 0, 0, 0, time.UTC),
+		Data:    []byte("test"),
+	}
+}
+
 func TestAppendSuccessCreate(t *testing.T) {
 	// create a new event store
-	es := eventstore.NewEventStore(&mockEventStoreReader{}, &mockEventStoreWriter{})
+	es := CreateEventStore()
 
 	// create a new event
-	event := eventstore.Event{
-		AggregateID:   "1",
-		AggregateType: "test",
-		EventNumber:   2,
-		EventName:     "test",
-		Created:       time.Date(2000, 3, 15, 0, 0, 0, 0, time.UTC),
-		Data:          []byte("test"),
-	}
+	event := CreatedEvent("1", 2)
 
 	// append the event
 	err := es.Append(event, context.Background())
@@ -117,17 +132,10 @@ func TestAppendSuccessCreate(t *testing.T) {
 
 func TestAppendSuccessUpdate(t *testing.T) {
 	// create a new event store
-	es := eventstore.NewEventStore(&mockEventStoreReader{}, &mockEventStoreWriter{})
+	es := CreateEventStore()
 
 	// create a new event
-	event := eventstore.Event{
-		AggregateID:   "4",
-		AggregateType: "test",
-		EventNumber:   3,
-		EventName:     "test",
-		Created:       time.Date(2000, 3, 15, 0, 0, 0, 0, time.UTC),
-		Data:          []byte("test"),
-	}
+	event := CreatedEvent("4", 3)
 
 	// append the event
 	err := es.Append(event, context.Background())
@@ -138,17 +146,10 @@ func TestAppendSuccessUpdate(t *testing.T) {
 
 func TestAppendFailureUpdate(t *testing.T) {
 	// create a new event store
-	es := eventstore.NewEventStore(&mockEventStoreReader{}, &mockEventStoreWriter{})
+	es := CreateEventStore()
 
 	// create a new event
-	event := eventstore.Event{
-		AggregateID:   "3",
-		AggregateType: "test",
-		EventNumber:   3,
-		EventName:     "test",
-		Created:       time.Date(2000, 3, 15, 0, 0, 0, 0, time.UTC),
-		Data:          []byte("test"),
-	}
+	event := CreatedEvent("3", 3)
 
 	// append the event
 	err := es.Append(event, context.Background())
@@ -159,17 +160,10 @@ func TestAppendFailureUpdate(t *testing.T) {
 
 func TestAppendFailure(t *testing.T) {
 	// create a new event store
-	es := eventstore.NewEventStore(&mockEventStoreReader{}, &mockEventStoreWriter{})
+	es := CreateEventStore()
 
 	// create a new event
-	event := eventstore.Event{
-		AggregateID:   "2",
-		AggregateType: "test",
-		EventNumber:   2,
-		EventName:     "test",
-		Created:       time.Date(2000, 3, 15, 0, 0, 0, 0, time.UTC),
-		Data:          []byte("test"),
-	}
+	event := CreatedEvent("2", 2)
 
 	// append the event
 	err := es.Append(event, context.Background())
@@ -180,17 +174,10 @@ func TestAppendFailure(t *testing.T) {
 
 func TestAppendVersionMismatch(t *testing.T) {
 	// create a new event store
-	es := eventstore.NewEventStore(&mockEventStoreReader{}, &mockEventStoreWriter{})
+	es := CreateEventStore()
 
 	// create a new event
-	event := eventstore.Event{
-		AggregateID:   "3",
-		AggregateType: "test",
-		EventNumber:   4,
-		EventName:     "test",
-		Created:       time.Date(2000, 3, 15, 0, 0, 0, 0, time.UTC),
-		Data:          []byte("test"),
-	}
+	event := CreatedEvent("3", 4)
 
 	// append the event
 	err := es.Append(event, context.Background())
@@ -204,7 +191,7 @@ func TestAppendVersionMismatch(t *testing.T) {
 
 func TestLoadEventsSuccess(t *testing.T) {
 	// create a new event store
-	es := eventstore.NewEventStore(&mockEventStoreReader{}, &mockEventStoreWriter{})
+	es := CreateEventStore()
 
 	// load events
 	events, err := es.LoadEvents("3", context.Background())
@@ -219,7 +206,7 @@ func TestLoadEventsSuccess(t *testing.T) {
 
 func TestLoadEventsFailureOnGetAggregate(t *testing.T) {
 	// create a new event store
-	es := eventstore.NewEventStore(&mockEventStoreReader{}, &mockEventStoreWriter{})
+	es := CreateEventStore()
 
 	// load events
 	_, err := es.LoadEvents("2", context.Background())
@@ -230,7 +217,7 @@ func TestLoadEventsFailureOnGetAggregate(t *testing.T) {
 
 func TestLoadEventsFailureOnGetEvents(t *testing.T) {
 	// create a new event store
-	es := eventstore.NewEventStore(&mockEventStoreReader{}, &mockEventStoreWriter{})
+	es := CreateEventStore()
 
 	// load events
 	_, err := es.LoadEvents("1", context.Background())

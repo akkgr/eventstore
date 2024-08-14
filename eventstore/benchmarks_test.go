@@ -6,6 +6,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/akkgr/eventstore/core"
 	"github.com/akkgr/eventstore/eventstore"
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/config"
@@ -19,10 +20,6 @@ func BenchmarkStoreLoadEvents(b *testing.B) {
 
 	cfg, err := config.LoadDefaultConfig(context.TODO(),
 		config.WithRegion("localhost"),
-		config.WithEndpointResolverWithOptions(aws.EndpointResolverWithOptionsFunc(
-			func(service, region string, options ...interface{}) (aws.Endpoint, error) {
-				return aws.Endpoint{URL: "http://localhost:8000"}, nil
-			})),
 		config.WithCredentialsProvider(credentials.StaticCredentialsProvider{
 			Value: aws.Credentials{
 				AccessKeyID: "abcd", SecretAccessKey: "a1b2c3", SessionToken: "",
@@ -34,9 +31,11 @@ func BenchmarkStoreLoadEvents(b *testing.B) {
 		panic(err)
 	}
 
-	client := dynamodb.NewFromConfig(cfg)
+	client := dynamodb.NewFromConfig(cfg, func(o *dynamodb.Options) {
+		o.BaseEndpoint = aws.String("http://localhost:8000")
+	})
 	dbc := eventstore.NewDynamoDBClient(client)
-	es := eventstore.NewEventStore(dbc, dbc)
+	es := eventstore.NewEventStore(dbc, dbc, core.TimerUTC{})
 
 	for i := 0; i < b.N; i++ {
 		_, err := es.LoadEvents("123", context.Background())
@@ -52,10 +51,6 @@ func BenchmarkStoreAppendEvents(b *testing.B) {
 
 	cfg, err := config.LoadDefaultConfig(context.TODO(),
 		config.WithRegion("localhost"),
-		config.WithEndpointResolverWithOptions(aws.EndpointResolverWithOptionsFunc(
-			func(service, region string, options ...interface{}) (aws.Endpoint, error) {
-				return aws.Endpoint{URL: "http://localhost:8000"}, nil
-			})),
 		config.WithCredentialsProvider(credentials.StaticCredentialsProvider{
 			Value: aws.Credentials{
 				AccessKeyID: "abcd", SecretAccessKey: "a1b2c3", SessionToken: "",
@@ -67,18 +62,20 @@ func BenchmarkStoreAppendEvents(b *testing.B) {
 		panic(err)
 	}
 
-	client := dynamodb.NewFromConfig(cfg)
+	client := dynamodb.NewFromConfig(cfg, func(o *dynamodb.Options) {
+		o.BaseEndpoint = aws.String("http://localhost:8000")
+	})
 	dbc := eventstore.NewDynamoDBClient(client)
-	es := eventstore.NewEventStore(dbc, dbc)
+	es := eventstore.NewEventStore(dbc, dbc, core.TimerUTC{})
 
 	for i := 0; i < b.N; i++ {
 		_ = es.Append(eventstore.Event{
-			AggregateID:   "123",
-			EventNumber:   i + 1,
-			AggregateType: "Customer",
-			EventName:     "CustomerUpdated",
-			Created:       time.Now(),
-			Data:          json.RawMessage(`{"name": "test test"}`),
+			Id:      "123",
+			Version: i + 1,
+			Entity:  "Customer",
+			Action:  "CustomerUpdated",
+			Created: time.Now(),
+			Data:    json.RawMessage(`{"name": "test test"}`),
 		}, context.Background())
 	}
 }
