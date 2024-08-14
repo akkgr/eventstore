@@ -38,11 +38,11 @@ type Snapshot struct {
 	Data    Payload        `json:"data" dynamodbav:"data"`
 }
 
-type EventStoreAppender interface {
+type EventAppender interface {
 	Append(event Event, ctx context.Context) error
 }
 
-type EventStoreLoader interface {
+type EventLoader interface {
 	LoadEvents(id AggregateId, ctx context.Context) ([]Event, error)
 }
 

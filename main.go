@@ -7,36 +7,14 @@ import (
 	"time"
 
 	"github.com/akkgr/eventstore/core"
+	"github.com/akkgr/eventstore/dynamodbstore"
 	"github.com/akkgr/eventstore/eventstore"
-	"github.com/aws/aws-sdk-go-v2/aws"
-	"github.com/aws/aws-sdk-go-v2/config"
-	"github.com/aws/aws-sdk-go-v2/credentials"
-	"github.com/aws/aws-sdk-go-v2/service/dynamodb"
 )
 
 func main() {
-	cfg, err := config.LoadDefaultConfig(context.TODO(),
-		config.WithRegion("localhost"),
-		config.WithCredentialsProvider(credentials.StaticCredentialsProvider{
-			Value: aws.Credentials{
-				AccessKeyID: "abcd", SecretAccessKey: "a1b2c3", SessionToken: "",
-				Source: "Mock credentials used above for local instance",
-			},
-		}),
-	)
 
-	if err != nil {
-		panic(err)
-	}
-
-	// Create a new DynamoDB client
-	client := dynamodb.NewFromConfig(cfg, func(o *dynamodb.Options) {
-		o.BaseEndpoint = aws.String("http://localhost:8000")
-	})
-
-	dbc := eventstore.NewDynamoDBClient(client)
-
-	es := eventstore.NewEventStore(dbc, dbc, core.TimerUTC{})
+	dbc := dynamodbstore.NewDynamoDBClient(context.TODO(), true)
+	es := eventstore.NewEventStore(dbc, dbc, core.DefaultTimer{})
 
 	events, err := es.LoadEvents("123", context.Background())
 	if err != nil {

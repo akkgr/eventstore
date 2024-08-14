@@ -8,8 +8,8 @@ type Timer interface {
 	Now() Timestamp
 }
 
-type TimerUTC struct{}
+type DefaultTimer struct{}
 
-func (t TimerUTC) Now() Timestamp {
+func (t DefaultTimer) Now() Timestamp {
 	return time.Now().UTC()
 }
