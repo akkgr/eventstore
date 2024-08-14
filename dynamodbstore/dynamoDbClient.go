@@ -2,6 +2,7 @@ package dynamodbstore
 
 import (
 	"context"
+	"strconv"
 
 	"github.com/akkgr/eventstore/eventstore"
 	"github.com/aws/aws-sdk-go-v2/aws"
@@ -64,8 +65,14 @@ func (dbc *DynamoDBClient) AppendAggregate(aggregate eventstore.Aggregate, ctx c
 		return err
 	}
 
+	version := strconv.Itoa(aggregate.LastEvent.Version - 1)
+
 	_, err = dbc.store.PutItem(ctx, &dynamodb.PutItemInput{
 		TableName: aws.String(dbc.aggregateTable), Item: item,
+		ConditionExpression: aws.String("version <> :version"),
+		ExpressionAttributeValues: map[string]types.AttributeValue{
+			":version": &types.AttributeValueMemberN{Value: version},
+		},
 	})
 	return err
 }
