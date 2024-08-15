@@ -19,7 +19,7 @@ func BenchmarkStoreLoadEvents(b *testing.B) {
 	es := eventstore.NewEventStore(dbc, dbc, core.DefaultTimer{})
 
 	for i := 0; i < b.N; i++ {
-		_, err := es.LoadEvents("123", context.Background())
+		_, err := es.LoadEvents("123", 0, context.Background())
 		if err != nil {
 			panic(err)
 		}

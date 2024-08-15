@@ -14,9 +14,12 @@ import (
 func main() {
 
 	dbc := dynamodbstore.NewDynamoDBClient(context.TODO(), true)
+	// dynamodbstore.CreateEventsTable(dbc)
+	// dynamodbstore.CreateAggregatesTable(dbc)
+	// dynamodbstore.CreateSnapshotsTable(dbc)
 	es := eventstore.NewEventStore(dbc, dbc, core.DefaultTimer{})
 
-	events, err := es.LoadEvents("123", context.Background())
+	events, err := es.LoadEvents("123", 0, context.Background())
 	if err != nil {
 		panic(err)
 	}
@@ -24,14 +27,30 @@ func main() {
 
 	num := len(events)
 	if num > 0 {
-		err = es.Append(eventstore.Event{
-			Id:      "123",
-			Version: num + 1,
-			Entity:  "Customer",
-			Action:  "CustomerUpdated",
-			Created: time.Now(),
-			Data:    json.RawMessage(`{"name": "test test"}`),
-		}, context.Background())
+		go func() {
+			err = es.Append(eventstore.Event{
+				Id:      "123",
+				Version: num + 1,
+				Entity:  "Customer",
+				Action:  "CustomerUpdated",
+				Created: time.Now(),
+				Data:    json.RawMessage(`{"name": "test test"}`),
+			}, context.Background())
+		}()
+		go func() {
+			err = es.Append(eventstore.Event{
+				Id:      "123",
+				Version: num + 1,
+				Entity:  "Customer",
+				Action:  "CustomerUpdated",
+				Created: time.Now(),
+				Data:    json.RawMessage(`{"name": "test test"}`),
+			}, context.Background())
+
+			if err != nil {
+				panic(err)
+			}
+		}()
 	} else {
 		err = es.Append(eventstore.Event{
 			Id:      "123",
@@ -46,7 +65,7 @@ func main() {
 		panic(err)
 	}
 
-	events, err = es.LoadEvents("123", context.Background())
+	events, err = es.LoadEvents("123", 0, context.Background())
 
 	if err != nil {
 		panic(err)

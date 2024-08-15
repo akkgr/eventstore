@@ -44,7 +44,24 @@ func (m *mockEventStoreReader) GetAggregate(id eventstore.AggregateId, ctx conte
 	}
 }
 
-func (m *mockEventStoreReader) GetEvents(id eventstore.AggregateId, ctx context.Context) ([]eventstore.Event, error) {
+func (m *mockEventStoreReader) GetSnapshot(id eventstore.AggregateId, ctx context.Context) (eventstore.Snapshot, error) {
+	switch id {
+	case "1":
+		return eventstore.Snapshot{}, nil
+	case "2":
+		return eventstore.Snapshot{}, errors.New("some error")
+	default:
+		return eventstore.Snapshot{
+			Id:      id,
+			Version: 1,
+			Entity:  "test",
+			Created: time.Date(2000, 3, 15, 0, 0, 0, 0, time.UTC),
+			Data:    []byte("test"),
+		}, nil
+	}
+}
+
+func (m *mockEventStoreReader) GetEvents(id eventstore.AggregateId, v eventstore.EventNumber, ctx context.Context) ([]eventstore.Event, error) {
 	switch id {
 	case "1":
 		return nil, errors.New("some error")
@@ -194,7 +211,7 @@ func TestLoadEventsSuccess(t *testing.T) {
 	es := CreateEventStore()
 
 	// load events
-	events, err := es.LoadEvents("3", context.Background())
+	events, err := es.LoadEvents("3", 0, context.Background())
 	if err != nil {
 		t.Error(err)
 	}
@@ -209,7 +226,7 @@ func TestLoadEventsFailureOnGetAggregate(t *testing.T) {
 	es := CreateEventStore()
 
 	// load events
-	_, err := es.LoadEvents("2", context.Background())
+	_, err := es.LoadEvents("2", 0, context.Background())
 	if err == nil {
 		t.Error("expected an error")
 	}
@@ -220,7 +237,7 @@ func TestLoadEventsFailureOnGetEvents(t *testing.T) {
 	es := CreateEventStore()
 
 	// load events
-	_, err := es.LoadEvents("1", context.Background())
+	_, err := es.LoadEvents("1", 0, context.Background())
 	if err == nil {
 		t.Error("expected an error")
 	}

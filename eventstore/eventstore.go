@@ -15,27 +15,27 @@ type EventNumber = int
 type Payload = []byte
 
 type Event struct {
-	Id      AggregateId    `json:"id" dynamodbav:"id"`
-	Version EventNumber    `json:"version" dynamodbav:"version"`
-	Entity  AggregateType  `json:"entity" dynamodbav:"entity"`
-	Action  EventName      `json:"action" dynamodbav:"action"`
-	Created core.Timestamp `json:"created" dynamodbav:"created"`
-	Data    Payload        `json:"data" dynamodbav:"data"`
+	Id      AggregateId    `json:"id"`
+	Version EventNumber    `json:"version"`
+	Entity  AggregateType  `json:"entity"`
+	Action  EventName      `json:"action"`
+	Created core.Timestamp `json:"created"`
+	Data    Payload        `json:"data"`
 }
 
 type Aggregate struct {
-	Id        AggregateId    `json:"id" dynamodbav:"id"`
-	Entity    AggregateType  `json:"entity" dynamodbav:"entity"`
-	LastEvent Event          `json:"lastEvent" dynamodbav:"lastEvent"`
-	Created   core.Timestamp `json:"created" dynamodbav:"created"`
+	Id        AggregateId    `json:"id"`
+	Entity    AggregateType  `json:"entity"`
+	Created   core.Timestamp `json:"created"`
+	LastEvent Event          `json:"lastEvent"`
 }
 
 type Snapshot struct {
-	Id      AggregateId    `json:"id" dynamodbav:"id"`
-	Version EventNumber    `json:"varsion" dynamodbav:"version"`
-	Entity  AggregateType  `json:"entity" dynamodbav:"entity"`
-	Created core.Timestamp `json:"created" dynamodbav:"created"`
-	Data    Payload        `json:"data" dynamodbav:"data"`
+	Id      AggregateId    `json:"id"`
+	Version EventNumber    `json:"varsion"`
+	Entity  AggregateType  `json:"entity"`
+	Created core.Timestamp `json:"created"`
+	Data    Payload        `json:"data"`
 }
 
 type EventAppender interface {
@@ -43,12 +43,13 @@ type EventAppender interface {
 }
 
 type EventLoader interface {
-	LoadEvents(id AggregateId, ctx context.Context) ([]Event, error)
+	LoadEvents(id AggregateId, v EventNumber, ctx context.Context) ([]Event, error)
 }
 
 type EventStoreReader interface {
 	GetAggregate(id AggregateId, ctx context.Context) (Aggregate, error)
-	GetEvents(id AggregateId, ctx context.Context) ([]Event, error)
+	GetEvents(id AggregateId, v EventNumber, ctx context.Context) ([]Event, error)
+	GetSnapshot(id AggregateId, ctx context.Context) (Snapshot, error)
 }
 
 type EventStoreWriter interface {
@@ -102,7 +103,7 @@ func (es *EventStore) Append(event Event, ctx context.Context) error {
 	return err
 }
 
-func (es *EventStore) LoadEvents(id AggregateId, ctx context.Context) ([]Event, error) {
+func (es *EventStore) LoadEvents(id AggregateId, v EventNumber, ctx context.Context) ([]Event, error) {
 	var wg sync.WaitGroup
 	eventChan := make(chan []Event, 1)
 	aggregateChan := make(chan Aggregate, 1)
@@ -122,7 +123,7 @@ func (es *EventStore) LoadEvents(id AggregateId, ctx context.Context) ([]Event, 
 
 	go func() {
 		defer wg.Done()
-		events, err := es.reader.GetEvents(id, ctx)
+		events, err := es.reader.GetEvents(id, v, ctx)
 		if err != nil {
 			errChan <- err
 			return

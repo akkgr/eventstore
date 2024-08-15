@@ -17,7 +17,7 @@ type DynamoDBClient struct {
 	store          *dynamodb.Client
 	aggregateTable string
 	eventsTable    string
-	SnapshotsTable string
+	snapshotsTable string
 }
 
 func NewDynamoDBClient(ctx context.Context, local bool) *DynamoDBClient {
@@ -55,20 +55,21 @@ func NewDynamoDBClient(ctx context.Context, local bool) *DynamoDBClient {
 		store:          client,
 		aggregateTable: "Aggregates",
 		eventsTable:    "Events",
-		SnapshotsTable: "Snapshots",
+		snapshotsTable: "Snapshots",
 	}
 }
 
-func (dbc *DynamoDBClient) AppendAggregate(aggregate eventstore.Aggregate, ctx context.Context) error {
-	item, err := attributevalue.MarshalMap(aggregate)
+func (dbc *DynamoDBClient) AppendAggregate(a eventstore.Aggregate, ctx context.Context) error {
+	item := aggregateFrom(a)
+	dbitem, err := attributevalue.MarshalMap(item)
 	if err != nil {
 		return err
 	}
 
-	version := strconv.Itoa(aggregate.LastEvent.Version - 1)
+	version := strconv.Itoa(item.LastEvent.Version - 1)
 
 	_, err = dbc.store.PutItem(ctx, &dynamodb.PutItemInput{
-		TableName: aws.String(dbc.aggregateTable), Item: item,
+		TableName: aws.String(dbc.aggregateTable), Item: dbitem,
 		ConditionExpression: aws.String("version <> :version"),
 		ExpressionAttributeValues: map[string]types.AttributeValue{
 			":version": &types.AttributeValueMemberN{Value: version},
@@ -77,67 +78,97 @@ func (dbc *DynamoDBClient) AppendAggregate(aggregate eventstore.Aggregate, ctx c
 	return err
 }
 
-func (dbc *DynamoDBClient) AppendSnapshot(snapshot eventstore.Snapshot, ctx context.Context) error {
-	item, err := attributevalue.MarshalMap(snapshot)
+func (dbc *DynamoDBClient) AppendSnapshot(s eventstore.Snapshot, ctx context.Context) error {
+	item := snapshotFrom(s)
+	dbitem, err := attributevalue.MarshalMap(item)
 	if err != nil {
 		return err
 	}
 
 	_, err = dbc.store.PutItem(ctx, &dynamodb.PutItemInput{
-		TableName: aws.String(dbc.SnapshotsTable), Item: item,
+		TableName: aws.String(dbc.snapshotsTable), Item: dbitem,
 	})
 	return err
 }
 
-func (dbc *DynamoDBClient) AppendEvent(event eventstore.Event, ctx context.Context) error {
-	item, err := attributevalue.MarshalMap(event)
+func (dbc *DynamoDBClient) AppendEvent(e eventstore.Event, ctx context.Context) error {
+	item := eventFrom(e)
+	dbitem, err := attributevalue.MarshalMap(item)
 	if err != nil {
 		return err
 	}
 
 	_, err = dbc.store.PutItem(ctx, &dynamodb.PutItemInput{
-		TableName: aws.String(dbc.eventsTable), Item: item,
+		TableName: aws.String(dbc.eventsTable), Item: dbitem,
 	})
 	return err
 }
 
 func (dbc *DynamoDBClient) GetAggregate(id eventstore.AggregateId, ctx context.Context) (eventstore.Aggregate, error) {
-	aggregate := eventstore.Aggregate{}
+	a := eventstore.Aggregate{}
 
 	marshaledId, err := attributevalue.Marshal(id)
 	if err != nil {
-		return aggregate, err
+		return a, err
 	}
 
-	key := map[string]types.AttributeValue{"aggregateId": marshaledId}
+	key := map[string]types.AttributeValue{"id": marshaledId}
 	response, err := dbc.store.GetItem(ctx, &dynamodb.GetItemInput{
 		Key: key, TableName: aws.String(dbc.aggregateTable),
 	})
 	if err != nil {
-		return aggregate, err
+		return a, err
 	}
 
-	err = attributevalue.UnmarshalMap(response.Item, &aggregate)
+	item := aggregate{}
+	err = attributevalue.UnmarshalMap(response.Item, &item)
 	if err != nil {
-		return aggregate, err
+		return a, err
 	}
-
-	return aggregate, err
+	a = aggregateTo(item)
+	return a, err
 }
 
-func (dbc *DynamoDBClient) GetEvents(id eventstore.AggregateId, ctx context.Context) ([]eventstore.Event, error) {
+func (dbc *DynamoDBClient) GetSnapshot(id eventstore.AggregateId, ctx context.Context) (eventstore.Snapshot, error) {
+	s := eventstore.Snapshot{}
+
+	marshaledId, err := attributevalue.Marshal(id)
+	if err != nil {
+		return s, err
+	}
+
+	key := map[string]types.AttributeValue{"id": marshaledId}
+	response, err := dbc.store.GetItem(ctx, &dynamodb.GetItemInput{
+		Key: key, TableName: aws.String(dbc.snapshotsTable),
+	})
+	if err != nil {
+		return s, err
+	}
+
+	item := snapshot{}
+	err = attributevalue.UnmarshalMap(response.Item, &item)
+	if err != nil {
+		return s, err
+	}
+	s = snapshotTo(item)
+	return s, err
+}
+
+func (dbc *DynamoDBClient) GetEvents(id eventstore.AggregateId, v eventstore.EventNumber, ctx context.Context) ([]eventstore.Event, error) {
 	var err error
 	var response *dynamodb.QueryOutput
 	var events []eventstore.Event
 
 	queryPaginator := dynamodb.NewQueryPaginator(dbc.store, &dynamodb.QueryInput{
 		TableName:              aws.String(dbc.eventsTable),
-		KeyConditionExpression: aws.String("#pk = :pk"),
+		KeyConditionExpression: aws.String("#pk = :pk and #sk > :sk"),
 		ExpressionAttributeNames: map[string]string{
-			"#pk": "aggregateId",
+			"#pk": "id",
+			"#sk": "version",
 		},
 		ExpressionAttributeValues: map[string]types.AttributeValue{
 			":pk": &types.AttributeValueMemberS{Value: id},
+			":sk": &types.AttributeValueMemberN{Value: strconv.Itoa(int(v))},
 		},
 	})
 	for queryPaginator.HasMorePages() {
@@ -145,12 +176,14 @@ func (dbc *DynamoDBClient) GetEvents(id eventstore.AggregateId, ctx context.Cont
 		if err != nil {
 			return events, err
 		}
-		var eventPage []eventstore.Event
+		var eventPage []event
 		err = attributevalue.UnmarshalListOfMaps(response.Items, &eventPage)
 		if err != nil {
 			return events, err
 		}
-		events = append(events, eventPage...)
+		for _, e := range eventPage {
+			events = append(events, eventTo(e))
+		}
 	}
 
 	return events, err
