@@ -10,7 +10,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/dynamodb/types"
 )
 
-func createTable(dbc *DynamoDBClient, tablename string, tableDesc *dynamodb.CreateTableInput) (*types.TableDescription, error) {
+func newTable(dbc *DynamoDBClient, tablename string, tableDesc *dynamodb.CreateTableInput) (*types.TableDescription, error) {
 	table, err := dbc.store.CreateTable(context.TODO(), tableDesc)
 	if err != nil {
 		log.Printf("Couldn't create table %v. Here's why: %v\n", tablename, err)
@@ -25,20 +25,20 @@ func createTable(dbc *DynamoDBClient, tablename string, tableDesc *dynamodb.Crea
 	return table.TableDescription, nil
 }
 
-func CreateEventsTable(dbc *DynamoDBClient) (*types.TableDescription, error) {
+func createEventsTable(dbc *DynamoDBClient) (*types.TableDescription, error) {
 	ti := &dynamodb.CreateTableInput{
 		AttributeDefinitions: []types.AttributeDefinition{{
-			AttributeName: aws.String("id"),
+			AttributeName: aws.String("Id"),
 			AttributeType: types.ScalarAttributeTypeS,
 		}, {
-			AttributeName: aws.String("version"),
+			AttributeName: aws.String("Version"),
 			AttributeType: types.ScalarAttributeTypeN,
 		}},
 		KeySchema: []types.KeySchemaElement{{
-			AttributeName: aws.String("id"),
+			AttributeName: aws.String("Id"),
 			KeyType:       types.KeyTypeHash,
 		}, {
-			AttributeName: aws.String("version"),
+			AttributeName: aws.String("Version"),
 			KeyType:       types.KeyTypeRange,
 		}},
 		TableName: aws.String(dbc.eventsTable),
@@ -47,17 +47,17 @@ func CreateEventsTable(dbc *DynamoDBClient) (*types.TableDescription, error) {
 			WriteCapacityUnits: aws.Int64(10),
 		},
 	}
-	return createTable(dbc, dbc.eventsTable, ti)
+	return newTable(dbc, dbc.eventsTable, ti)
 }
 
-func CreateAggregatesTable(dbc *DynamoDBClient) (*types.TableDescription, error) {
+func createAggregatesTable(dbc *DynamoDBClient) (*types.TableDescription, error) {
 	ti := &dynamodb.CreateTableInput{
 		AttributeDefinitions: []types.AttributeDefinition{{
-			AttributeName: aws.String("id"),
+			AttributeName: aws.String("Id"),
 			AttributeType: types.ScalarAttributeTypeS,
 		}},
 		KeySchema: []types.KeySchemaElement{{
-			AttributeName: aws.String("id"),
+			AttributeName: aws.String("Id"),
 			KeyType:       types.KeyTypeHash,
 		}},
 		TableName: aws.String(dbc.aggregateTable),
@@ -66,24 +66,17 @@ func CreateAggregatesTable(dbc *DynamoDBClient) (*types.TableDescription, error)
 			WriteCapacityUnits: aws.Int64(10),
 		},
 	}
-	return createTable(dbc, dbc.aggregateTable, ti)
+	return newTable(dbc, dbc.aggregateTable, ti)
 }
 
-func CreateSnapshotsTable(dbc *DynamoDBClient) (*types.TableDescription, error) {
-	ti := &dynamodb.CreateTableInput{
-		AttributeDefinitions: []types.AttributeDefinition{{
-			AttributeName: aws.String("id"),
-			AttributeType: types.ScalarAttributeTypeS,
-		}},
-		KeySchema: []types.KeySchemaElement{{
-			AttributeName: aws.String("id"),
-			KeyType:       types.KeyTypeHash,
-		}},
-		TableName: aws.String(dbc.snapshotsTable),
-		ProvisionedThroughput: &types.ProvisionedThroughput{
-			ReadCapacityUnits:  aws.Int64(10),
-			WriteCapacityUnits: aws.Int64(10),
-		},
+func CreateTables(dbc *DynamoDBClient) error {
+	_, err := createEventsTable(dbc)
+	if err != nil {
+		return err
 	}
-	return createTable(dbc, dbc.snapshotsTable, ti)
+	_, err = createAggregatesTable(dbc)
+	if err != nil {
+		return err
+	}
+	return nil
 }

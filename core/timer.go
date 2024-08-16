@@ -3,11 +3,11 @@ package core
 import "time"
 
 type Timer interface {
-	Now() Timestamp
+	Now() time.Time
 }
 
 type DefaultTimer struct{}
 
-func (t DefaultTimer) Now() Timestamp {
+func (t DefaultTimer) Now() time.Time {
 	return time.Now().UTC()
 }

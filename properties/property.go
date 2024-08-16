@@ -3,74 +3,55 @@ package properties
 import (
 	"time"
 
-	"github.com/akkgr/eventstore/core"
 	"github.com/shopspring/decimal"
 )
 
-type Value = string
-type ValueId = string
-type ValueType string
-
-const (
-	Text   ValueType = "text"
-	Number ValueType = "number"
-	Date   ValueType = "date"
-)
-
-type Property interface {
-	GetId() ValueId
-	GetType() ValueType
-	GetValue() (interface{}, error)
+type Property struct {
+	Id    string `json:"id"`
+	Type  string `json:"type"`
+	Value string `json:"value"`
 }
 
-type property struct {
-	Id    ValueId   `json:"id" dynamodbav:"id"`
-	Type  ValueType `json:"type" dynamodbav:"type"`
-	Value Value     `json:"value" dynamodbav:"value"`
+type PropertyTypes interface {
+	string | decimal.Decimal | time.Time
 }
 
-func (p *property) GetId() ValueId {
-	return p.Id
+func NewProperty[T PropertyTypes](id string, v T) (Property, error) {
+	val := any(v)
+	switch val := val.(type) {
+	case string:
+		return Property{
+			Id:    id,
+			Type:  "text",
+			Value: val,
+		}, nil
+	case decimal.Decimal:
+		return Property{
+			Id:    id,
+			Type:  "number",
+			Value: val.String(),
+		}, nil
+	case time.Time:
+		return Property{
+			Id:    id,
+			Type:  "date",
+			Value: val.Format(time.RFC3339),
+		}, nil
+	default:
+		return Property{}, InvalidPropertyType{}
+	}
 }
 
-func (p *property) GetType() ValueType {
-	return p.Type
-}
-
-func (p *property) GetValue() (interface{}, error) {
+func (p *Property) GetValue() (any, error) {
 	switch p.Type {
-	case Text:
+	case "text":
 		return p.Value, nil
-	case Number:
+	case "number":
 		return decimal.NewFromString(p.Value)
-	case Date:
+	case "date":
 		return time.Parse(time.RFC3339, p.Value)
 	default:
-		return nil, nil
-	}
-}
-
-func NewTextProperty(id ValueId, v core.Text) Property {
-	return &property{
-		Id:    id,
-		Type:  Text,
-		Value: v,
-	}
-}
-
-func NewNumberProperty(id ValueId, v core.Number) Property {
-	return &property{
-		Id:    id,
-		Type:  Text,
-		Value: v.String(),
-	}
-}
-
-func NewDateProperty(id ValueId, v core.Timestamp) Property {
-	return &property{
-		Id:    id,
-		Type:  Text,
-		Value: v.Format(time.RFC3339),
+		return nil, InvalidPropertyType{}
 	}
 }
 
@@ -78,6 +59,6 @@ type Properties = map[string]Property
 type Collection = map[string]Properties
 type Collections = map[string]Collection
 type Data struct {
-	Properties  Properties  `json:"properties" dynamodbav:"properties"`
-	Collections Collections `json:"collections" dynamodbav:"collections"`
+	Properties  Properties  `json:"properties"`
+	Collections Collections `json:"collections"`
 }

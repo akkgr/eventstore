@@ -2,7 +2,6 @@ package eventstore_test
 
 import (
 	"context"
-	"encoding/json"
 	"testing"
 	"time"
 
@@ -19,7 +18,7 @@ func BenchmarkStoreLoadEvents(b *testing.B) {
 	es := eventstore.NewEventStore(dbc, dbc, core.DefaultTimer{})
 
 	for i := 0; i < b.N; i++ {
-		_, err := es.LoadEvents("123", 0, context.Background())
+		_, err := es.GetEvents("123", 0, context.Background())
 		if err != nil {
 			panic(err)
 		}
@@ -34,13 +33,14 @@ func BenchmarkStoreAppendEvents(b *testing.B) {
 	es := eventstore.NewEventStore(dbc, dbc, core.DefaultTimer{})
 
 	for i := 0; i < b.N; i++ {
-		_ = es.Append(eventstore.Event{
+		x := eventstore.Event{
 			Id:      "123",
 			Version: i + 1,
 			Entity:  "Customer",
 			Action:  "CustomerUpdated",
 			Created: time.Now(),
-			Data:    json.RawMessage(`{"name": "test test"}`),
-		}, context.Background())
+			Data:    []byte(`{"name":"John Doe"}`),
+		}
+		_ = es.Append(x, context.Background())
 	}
 }

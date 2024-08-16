@@ -2,60 +2,28 @@ package eventstore
 
 import (
 	"context"
-	"errors"
 	"sync"
 
 	"github.com/akkgr/eventstore/core"
 )
 
-type AggregateId = string
-type AggregateType = string
-type EventName = string
-type EventNumber = int
-type Payload = []byte
-
-type Event struct {
-	Id      AggregateId    `json:"id"`
-	Version EventNumber    `json:"version"`
-	Entity  AggregateType  `json:"entity"`
-	Action  EventName      `json:"action"`
-	Created core.Timestamp `json:"created"`
-	Data    Payload        `json:"data"`
-}
-
-type Aggregate struct {
-	Id        AggregateId    `json:"id"`
-	Entity    AggregateType  `json:"entity"`
-	Created   core.Timestamp `json:"created"`
-	LastEvent Event          `json:"lastEvent"`
-}
-
-type Snapshot struct {
-	Id      AggregateId    `json:"id"`
-	Version EventNumber    `json:"varsion"`
-	Entity  AggregateType  `json:"entity"`
-	Created core.Timestamp `json:"created"`
-	Data    Payload        `json:"data"`
-}
-
 type EventAppender interface {
-	Append(event Event, ctx context.Context) error
+	Append(e Event, c context.Context) error
 }
 
 type EventLoader interface {
-	LoadEvents(id AggregateId, v EventNumber, ctx context.Context) ([]Event, error)
+	GetEvents(id string, v int, c context.Context) ([]Event, error)
 }
 
 type EventStoreReader interface {
-	GetAggregate(id AggregateId, ctx context.Context) (Aggregate, error)
-	GetEvents(id AggregateId, v EventNumber, ctx context.Context) ([]Event, error)
-	GetSnapshot(id AggregateId, ctx context.Context) (Snapshot, error)
+	GetLastEvent(id string, c context.Context) (Event, error)
+	GetEvents(id string, v int, c context.Context) ([]Event, error)
 }
 
 type EventStoreWriter interface {
-	AppendAggregate(aggregate Aggregate, ctx context.Context) error
-	AppendEvent(event Event, ctx context.Context) error
-	AppendSnapshot(snapshot Snapshot, ctx context.Context) error
+	AppendLastEvent(e Event, c context.Context) error
+	UpdateLastEvent(e Event, c context.Context) error
+	AppendEvent(e Event, c context.Context) error
 }
 
 type EventStore struct {
@@ -64,56 +32,54 @@ type EventStore struct {
 	timer  core.Timer
 }
 
-func NewEventStore(reader EventStoreReader, writer EventStoreWriter, timer core.Timer) *EventStore {
+func NewEventStore(r EventStoreReader, w EventStoreWriter, t core.Timer) *EventStore {
 	return &EventStore{
-		reader: reader,
-		writer: writer,
-		timer:  timer,
+		reader: r,
+		writer: w,
+		timer:  t,
 	}
 }
 
-func (es *EventStore) Append(event Event, ctx context.Context) error {
-	// get the last event
-	aggregate, err := es.reader.GetAggregate(event.Id, ctx)
+func (es *EventStore) Append(e Event, c context.Context) error {
+	a, err := es.reader.GetLastEvent(e.Id, c)
 	if err != nil {
 		return err
 	}
 
-	if aggregate.LastEvent.Version != 0 {
-		// Check if the version of the last event is one less than the current event
-		if aggregate.LastEvent.Version != event.Version-1 {
-			return errors.New("version mismatch")
-		}
+	if a.Version != e.Version-1 {
+		return InvalidVersion{}
+	}
 
-		// Append the event
-		err = es.writer.AppendEvent(aggregate.LastEvent, ctx)
+	if a.Version > 0 {
+		err = es.writer.AppendEvent(a, c)
 		if err != nil {
 			return err
 		}
+		err = es.writer.UpdateLastEvent(e, c)
+		return err
 	} else {
-		aggregate.Id = event.Id
-		aggregate.Entity = event.Entity
-		aggregate.Created = es.timer.Now()
-
+		err = es.writer.AppendLastEvent(e, c)
+		return err
 	}
-
-	// Update the aggregate
-	aggregate.LastEvent = event
-	err = es.writer.AppendAggregate(aggregate, ctx)
-	return err
 }
 
-func (es *EventStore) LoadEvents(id AggregateId, v EventNumber, ctx context.Context) ([]Event, error) {
+// LoadEvents loads all events for an aggregate starting from a specific version.
+// If the version is 0, it will return all events.
+// If the version is greater than the current version, it will return an error.
+// id is the aggregate id.
+// v is the version to start from.
+// c is the context.
+func (es *EventStore) GetEvents(id string, v int, c context.Context) ([]Event, error) {
 	var wg sync.WaitGroup
 	eventChan := make(chan []Event, 1)
-	aggregateChan := make(chan Aggregate, 1)
+	aggregateChan := make(chan Event, 1)
 	errChan := make(chan error, 2)
 
 	wg.Add(2)
 
 	go func() {
 		defer wg.Done()
-		aggregate, err := es.reader.GetAggregate(id, ctx)
+		aggregate, err := es.reader.GetLastEvent(id, c)
 		if err != nil {
 			errChan <- err
 			return
@@ -123,7 +89,7 @@ func (es *EventStore) LoadEvents(id AggregateId, v EventNumber, ctx context.Cont
 
 	go func() {
 		defer wg.Done()
-		events, err := es.reader.GetEvents(id, v, ctx)
+		events, err := es.reader.GetEvents(id, v, c)
 		if err != nil {
 			errChan <- err
 			return
@@ -143,9 +109,16 @@ func (es *EventStore) LoadEvents(id AggregateId, v EventNumber, ctx context.Cont
 	aggregate := <-aggregateChan
 	events := <-eventChan
 
-	if aggregate.LastEvent.Version == 0 {
-		return events, nil
-	} else {
-		return append(events, aggregate.LastEvent), nil
+	if aggregate.Version < v {
+		return nil, InvalidVersion{}
 	}
+
+	// return the events up the persisted aggregate version
+	// due to concurrency errors, there might be more events than the last version
+	// these events are ignored and will be overridden in future appends
+	if aggregate.Version > 0 {
+		events = events[:aggregate.Version-1]
+	}
+
+	return append(events, aggregate), nil
 }

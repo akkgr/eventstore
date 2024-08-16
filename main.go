@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"flag"
 	"fmt"
 	"time"
 
@@ -13,13 +14,21 @@ import (
 
 func main() {
 
+	createTables := flag.Bool("tbl", false, "create tables")
+	flag.Parse()
+
 	dbc := dynamodbstore.NewDynamoDBClient(context.TODO(), true)
-	// dynamodbstore.CreateEventsTable(dbc)
-	// dynamodbstore.CreateAggregatesTable(dbc)
-	// dynamodbstore.CreateSnapshotsTable(dbc)
+
+	if *createTables {
+		err := dynamodbstore.CreateTables(dbc)
+		if err != nil {
+			panic(err)
+		}
+	}
+
 	es := eventstore.NewEventStore(dbc, dbc, core.DefaultTimer{})
 
-	events, err := es.LoadEvents("123", 0, context.Background())
+	events, err := es.GetEvents("123", 0, context.Background())
 	if err != nil {
 		panic(err)
 	}
@@ -65,7 +74,7 @@ func main() {
 		panic(err)
 	}
 
-	events, err = es.LoadEvents("123", 0, context.Background())
+	events, err = es.GetEvents("123", 0, context.Background())
 
 	if err != nil {
 		panic(err)
