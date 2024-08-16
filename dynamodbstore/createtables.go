@@ -50,7 +50,7 @@ func createEventsTable(dbc *DynamoDBClient) (*types.TableDescription, error) {
 	return newTable(dbc, dbc.eventsTable, ti)
 }
 
-func createAggregatesTable(dbc *DynamoDBClient) (*types.TableDescription, error) {
+func createLastEventTable(dbc *DynamoDBClient) (*types.TableDescription, error) {
 	ti := &dynamodb.CreateTableInput{
 		AttributeDefinitions: []types.AttributeDefinition{{
 			AttributeName: aws.String("Id"),
@@ -60,13 +60,13 @@ func createAggregatesTable(dbc *DynamoDBClient) (*types.TableDescription, error)
 			AttributeName: aws.String("Id"),
 			KeyType:       types.KeyTypeHash,
 		}},
-		TableName: aws.String(dbc.aggregateTable),
+		TableName: aws.String(dbc.lastEventTable),
 		ProvisionedThroughput: &types.ProvisionedThroughput{
 			ReadCapacityUnits:  aws.Int64(10),
 			WriteCapacityUnits: aws.Int64(10),
 		},
 	}
-	return newTable(dbc, dbc.aggregateTable, ti)
+	return newTable(dbc, dbc.lastEventTable, ti)
 }
 
 func CreateTables(dbc *DynamoDBClient) error {
@@ -74,7 +74,7 @@ func CreateTables(dbc *DynamoDBClient) error {
 	if err != nil {
 		return err
 	}
-	_, err = createAggregatesTable(dbc)
+	_, err = createLastEventTable(dbc)
 	if err != nil {
 		return err
 	}

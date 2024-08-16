@@ -15,7 +15,7 @@ import (
 
 type DynamoDBClient struct {
 	store          *dynamodb.Client
-	aggregateTable string
+	lastEventTable string
 	eventsTable    string
 }
 
@@ -52,7 +52,7 @@ func NewDynamoDBClient(c context.Context, local bool) *DynamoDBClient {
 
 	return &DynamoDBClient{
 		store:          client,
-		aggregateTable: "Aggregates",
+		lastEventTable: "LastEvent",
 		eventsTable:    "Events",
 	}
 }
@@ -64,7 +64,7 @@ func (dbc *DynamoDBClient) AppendLastEvent(e eventstore.Event, ctx context.Conte
 	}
 
 	_, err = dbc.store.PutItem(ctx, &dynamodb.PutItemInput{
-		TableName: aws.String(dbc.aggregateTable), Item: item,
+		TableName: aws.String(dbc.lastEventTable), Item: item,
 	})
 
 	return err
@@ -79,7 +79,7 @@ func (dbc *DynamoDBClient) UpdateLastEvent(e eventstore.Event, ctx context.Conte
 	version := strconv.Itoa(e.Version - 1)
 
 	_, err = dbc.store.PutItem(ctx, &dynamodb.PutItemInput{
-		TableName: aws.String(dbc.aggregateTable), Item: item,
+		TableName: aws.String(dbc.lastEventTable), Item: item,
 		ConditionExpression: aws.String("Version = :version"),
 		ExpressionAttributeValues: map[string]types.AttributeValue{
 			":version": &types.AttributeValueMemberN{Value: version},
@@ -112,7 +112,7 @@ func (dbc *DynamoDBClient) GetLastEvent(id string, c context.Context) (eventstor
 
 	key := map[string]types.AttributeValue{"Id": marshaledId}
 	response, err := dbc.store.GetItem(c, &dynamodb.GetItemInput{
-		Key: key, TableName: aws.String(dbc.aggregateTable),
+		Key: key, TableName: aws.String(dbc.lastEventTable),
 	})
 	if err != nil {
 		return a, err

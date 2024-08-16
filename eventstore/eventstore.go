@@ -109,16 +109,17 @@ func (es *EventStore) GetEvents(id string, v int, c context.Context) ([]Event, e
 	aggregate := <-aggregateChan
 	events := <-eventChan
 
+	if aggregate.Version == 0 {
+		return nil, EventsNotFound{}
+	}
+
 	if aggregate.Version < v {
 		return nil, InvalidVersion{}
 	}
 
-	// return the events up the persisted aggregate version
 	// due to concurrency errors, there might be more events than the last version
 	// these events are ignored and will be overridden in future appends
-	if aggregate.Version > 0 {
-		events = events[:aggregate.Version-1]
-	}
+	events = events[:aggregate.Version-1]
 
 	return append(events, aggregate), nil
 }
