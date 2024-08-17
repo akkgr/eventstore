@@ -7,38 +7,32 @@ import (
 )
 
 type Property struct {
-	Id    string `json:"id"`
+	Id    string `json:"id,omitempty"`
 	Type  string `json:"type"`
 	Value string `json:"value"`
 }
 
-type PropertyTypes interface {
-	string | decimal.Decimal | time.Time
+func NewTextProperty(v string) Property {
+	return Property{
+		Id:    "",
+		Type:  "text",
+		Value: v,
+	}
 }
 
-func NewProperty[T PropertyTypes](id string, v T) (Property, error) {
-	val := any(v)
-	switch val := val.(type) {
-	case string:
-		return Property{
-			Id:    id,
-			Type:  "text",
-			Value: val,
-		}, nil
-	case decimal.Decimal:
-		return Property{
-			Id:    id,
-			Type:  "number",
-			Value: val.String(),
-		}, nil
-	case time.Time:
-		return Property{
-			Id:    id,
-			Type:  "date",
-			Value: val.Format(time.RFC3339),
-		}, nil
-	default:
-		return Property{}, InvalidPropertyType{}
+func NewNumberProperty(v decimal.Decimal) Property {
+	return Property{
+		Id:    "",
+		Type:  "number",
+		Value: v.String(),
+	}
+}
+
+func NewDateProperty(v time.Time) Property {
+	return Property{
+		Id:    "",
+		Type:  "date",
+		Value: v.Format(time.RFC3339),
 	}
 }
 

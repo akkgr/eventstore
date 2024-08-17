@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 
 	"github.com/akkgr/eventstore/core"
+	"github.com/akkgr/eventstore/properties"
 	"github.com/google/uuid"
 )
 
@@ -25,6 +26,7 @@ type CustomerCreatedEvent struct {
 type CustomerUpdatedEvent struct {
 	Name   string
 	Status string
+	properties.Data
 }
 
 func (c *Customer) customerCreated(e core.Event) error {
@@ -45,6 +47,7 @@ func (c *Customer) customerUpdated(e core.Event) error {
 	}
 	c.Name = payload.Name
 	c.Status = payload.Status
+	c.Data = payload.Data
 
 	return nil
 }

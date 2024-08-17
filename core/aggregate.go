@@ -1,5 +1,7 @@
 package core
 
+import "github.com/akkgr/eventstore/properties"
+
 type Aggregate interface {
 	Apply(event any) error
 }
@@ -8,6 +10,7 @@ type AggregateBase struct {
 	Id      string
 	Entity  string
 	Version int
+	properties.Data
 }
 
 func (a *AggregateBase) New(id string, entity string) {
