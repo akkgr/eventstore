@@ -1,10 +1,17 @@
-package eventstore
+package core
+
+type InvalidPayload struct {
+}
+
+func (e InvalidPayload) Error() string {
+	return "Invalid payload"
+}
 
 type InvalidVersion struct {
 }
 
 func (e InvalidVersion) Error() string {
-	return "version mismatch"
+	return "Invalid version"
 }
 
 type EventsNotFound struct {

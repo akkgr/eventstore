@@ -3,14 +3,14 @@ package main
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"flag"
 	"fmt"
-	"time"
 
 	"github.com/akkgr/eventstore/core"
+	"github.com/akkgr/eventstore/customer"
 	"github.com/akkgr/eventstore/dynamodbstore"
 	"github.com/akkgr/eventstore/eventstore"
+	"github.com/google/uuid"
 )
 
 func main() {
@@ -27,59 +27,33 @@ func main() {
 		}
 	}
 
-	es := eventstore.NewEventStore(dbc, dbc, core.DefaultTimer{})
+	es := eventstore.NewEventStore(dbc, dbc, core.NewDefaultTimer())
 
-	events, err := es.GetEvents("123", 0, context.Background())
-	if err != nil {
-		switch {
-		case errors.Is(err, eventstore.EventsNotFound{}):
-			fmt.Println("no events found")
-		default:
-			panic(err)
-		}
-	}
+	// create some events
+	id := uuid.New().String()
+	e1, _ := core.NewEvent(id, 1, "Customer", "CustomerCreated", map[string]interface{}{"Name": "John Doe"})
+	e2, _ := core.NewEvent(id, 2, "Customer", "CustomerUpdated", map[string]interface{}{"Name": "John Doe", "Status": "Active"})
+	e3, _ := core.NewEvent(id, 3, "Customer", "CustomerUpdated", map[string]interface{}{"Name": "John Doe", "Status": "Inactive"})
+
+	// publish the events
+	es.Publish(e1, context.Background())
+	es.Publish(e2, context.Background())
+	es.Publish(e3, context.Background())
+
+	// read the events
+	events, _ := es.LoadEvents(id, 0, context.Background())
 	prettyPrint(events)
 
-	num := len(events)
-	if num > 0 {
-
-		err = es.Append(eventstore.Event{
-			Id:      "123",
-			Version: num + 1,
-			Entity:  "Customer",
-			Action:  "CustomerUpdated",
-			Created: time.Now(),
-			Data:    json.RawMessage(`{"name": "test test"}`),
-		}, context.Background())
-
-		if err != nil {
-			panic(err)
-		}
-
-	} else {
-		err = es.Append(eventstore.Event{
-			Id:      "123",
-			Version: 1,
-			Entity:  "Customer",
-			Action:  "CustomerCreated",
-			Created: time.Now(),
-			Data:    json.RawMessage(`{"name": "test"}`),
-		}, context.Background())
+	// construct the customer from the events
+	c := customer.Customer{}
+	for _, e := range *events {
+		c.Apply(e)
 	}
-	if err != nil {
-		panic(err)
-	}
-
-	events, err = es.GetEvents("123", 0, context.Background())
-
-	if err != nil {
-		panic(err)
-	}
-	prettyPrint(events)
+	prettyPrint(c)
 }
 
-func prettyPrint(events []eventstore.Event) {
-	b, err := json.MarshalIndent(events, "", "  ")
+func prettyPrint(obj any) {
+	b, err := json.MarshalIndent(obj, "", "  ")
 	if err != nil {
 		fmt.Println(err)
 	}

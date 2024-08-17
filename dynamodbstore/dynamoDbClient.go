@@ -4,7 +4,7 @@ import (
 	"context"
 	"strconv"
 
-	"github.com/akkgr/eventstore/eventstore"
+	"github.com/akkgr/eventstore/core"
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/config"
 	"github.com/aws/aws-sdk-go-v2/credentials"
@@ -57,20 +57,20 @@ func NewDynamoDBClient(c context.Context, local bool) *DynamoDBClient {
 	}
 }
 
-func (dbc *DynamoDBClient) AppendLastEvent(e eventstore.Event, ctx context.Context) error {
+func (dbc *DynamoDBClient) AppendLastEvent(e *core.Event, c context.Context) error {
 	item, err := attributevalue.MarshalMap(e)
 	if err != nil {
 		return err
 	}
 
-	_, err = dbc.store.PutItem(ctx, &dynamodb.PutItemInput{
+	_, err = dbc.store.PutItem(c, &dynamodb.PutItemInput{
 		TableName: aws.String(dbc.lastEventTable), Item: item,
 	})
 
 	return err
 }
 
-func (dbc *DynamoDBClient) UpdateLastEvent(e eventstore.Event, ctx context.Context) error {
+func (dbc *DynamoDBClient) UpdateLastEvent(e *core.Event, ctx context.Context) error {
 	item, err := attributevalue.MarshalMap(e)
 	if err != nil {
 		return err
@@ -89,7 +89,7 @@ func (dbc *DynamoDBClient) UpdateLastEvent(e eventstore.Event, ctx context.Conte
 	return err
 }
 
-func (dbc *DynamoDBClient) AppendEvent(e eventstore.Event, ctx context.Context) error {
+func (dbc *DynamoDBClient) AppendEvent(e *core.Event, ctx context.Context) error {
 	item, err := attributevalue.MarshalMap(e)
 	if err != nil {
 		return err
@@ -102,12 +102,12 @@ func (dbc *DynamoDBClient) AppendEvent(e eventstore.Event, ctx context.Context) 
 	return err
 }
 
-func (dbc *DynamoDBClient) GetLastEvent(id string, c context.Context) (eventstore.Event, error) {
-	a := eventstore.Event{}
+func (dbc *DynamoDBClient) GetLastEvent(id string, c context.Context) (*core.Event, error) {
+	a := core.Event{}
 
 	marshaledId, err := attributevalue.Marshal(id)
 	if err != nil {
-		return a, err
+		return &a, err
 	}
 
 	key := map[string]types.AttributeValue{"Id": marshaledId}
@@ -115,21 +115,21 @@ func (dbc *DynamoDBClient) GetLastEvent(id string, c context.Context) (eventstor
 		Key: key, TableName: aws.String(dbc.lastEventTable),
 	})
 	if err != nil {
-		return a, err
+		return &a, err
 	}
 
-	item := eventstore.Event{}
+	item := core.Event{}
 	err = attributevalue.UnmarshalMap(response.Item, &item)
 	if err != nil {
-		return a, err
+		return &a, err
 	}
-	return item, err
+	return &item, err
 }
 
-func (dbc *DynamoDBClient) GetEvents(id string, v int, c context.Context) ([]eventstore.Event, error) {
+func (dbc *DynamoDBClient) GetEvents(id string, v int, c context.Context) (*[]core.Event, error) {
 	var err error
 	var response *dynamodb.QueryOutput
-	var events []eventstore.Event
+	var events []core.Event
 
 	queryPaginator := dynamodb.NewQueryPaginator(dbc.store, &dynamodb.QueryInput{
 		TableName:              aws.String(dbc.eventsTable),
@@ -146,15 +146,15 @@ func (dbc *DynamoDBClient) GetEvents(id string, v int, c context.Context) ([]eve
 	for queryPaginator.HasMorePages() {
 		response, err = queryPaginator.NextPage(context.TODO())
 		if err != nil {
-			return events, err
+			return &events, err
 		}
-		var eventPage []eventstore.Event
+		var eventPage []core.Event
 		err = attributevalue.UnmarshalListOfMaps(response.Items, &eventPage)
 		if err != nil {
-			return events, err
+			return &events, err
 		}
 		events = append(events, eventPage...)
 	}
 
-	return events, err
+	return &events, err
 }

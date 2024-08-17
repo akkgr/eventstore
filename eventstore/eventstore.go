@@ -7,23 +7,23 @@ import (
 	"github.com/akkgr/eventstore/core"
 )
 
-type EventAppender interface {
-	Append(e Event, c context.Context) error
+type EventPublisher interface {
+	Publish(e *core.Event, c context.Context) error
 }
 
 type EventLoader interface {
-	GetEvents(id string, v int, c context.Context) ([]Event, error)
+	LoadEvents(id string, v int, c context.Context) (*[]core.Event, error)
 }
 
 type EventStoreReader interface {
-	GetLastEvent(id string, c context.Context) (Event, error)
-	GetEvents(id string, v int, c context.Context) ([]Event, error)
+	GetLastEvent(id string, c context.Context) (*core.Event, error)
+	GetEvents(id string, v int, c context.Context) (*[]core.Event, error)
 }
 
 type EventStoreWriter interface {
-	AppendLastEvent(e Event, c context.Context) error
-	UpdateLastEvent(e Event, c context.Context) error
-	AppendEvent(e Event, c context.Context) error
+	AppendLastEvent(e *core.Event, c context.Context) error
+	UpdateLastEvent(e *core.Event, c context.Context) error
+	AppendEvent(e *core.Event, c context.Context) error
 }
 
 type EventStore struct {
@@ -40,14 +40,14 @@ func NewEventStore(r EventStoreReader, w EventStoreWriter, t core.Timer) *EventS
 	}
 }
 
-func (es *EventStore) Append(e Event, c context.Context) error {
+func (es *EventStore) Publish(e *core.Event, c context.Context) error {
 	a, err := es.reader.GetLastEvent(e.Id, c)
 	if err != nil {
 		return err
 	}
 
 	if a.Version != e.Version-1 {
-		return InvalidVersion{}
+		return core.InvalidVersion{}
 	}
 
 	if a.Version > 0 {
@@ -69,10 +69,10 @@ func (es *EventStore) Append(e Event, c context.Context) error {
 // id is the aggregate id.
 // v is the version to start from.
 // c is the context.
-func (es *EventStore) GetEvents(id string, v int, c context.Context) ([]Event, error) {
+func (es *EventStore) LoadEvents(id string, v int, c context.Context) (*[]core.Event, error) {
 	var wg sync.WaitGroup
-	eventChan := make(chan []Event, 1)
-	aggregateChan := make(chan Event, 1)
+	eventChan := make(chan *[]core.Event, 1)
+	aggregateChan := make(chan *core.Event, 1)
 	errChan := make(chan error, 2)
 
 	wg.Add(2)
@@ -110,16 +110,24 @@ func (es *EventStore) GetEvents(id string, v int, c context.Context) ([]Event, e
 	events := <-eventChan
 
 	if aggregate.Version == 0 {
-		return nil, EventsNotFound{}
+		return nil, core.EventsNotFound{}
 	}
 
 	if aggregate.Version < v {
-		return nil, InvalidVersion{}
+		return nil, core.InvalidVersion{}
 	}
+
+	all := *events
+	last := *aggregate
 
 	// due to concurrency errors, there might be more events than the last version
 	// these events are ignored and will be overridden in future appends
-	events = events[:aggregate.Version-1]
+	if len(all) > 0 && all[len(all)-1].Version > aggregate.Version {
+		all = all[:aggregate.Version]
+		events = &all
+	}
 
-	return append(events, aggregate), nil
+	result := append(all, last)
+
+	return &result, nil
 }

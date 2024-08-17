@@ -6,7 +6,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/akkgr/eventstore/eventstore"
+	. "github.com/akkgr/eventstore/core"
+	. "github.com/akkgr/eventstore/eventstore"
 )
 
 // mock Timer
@@ -21,39 +22,39 @@ func (m *mockTimer) Now() time.Time {
 type mockEventStoreReader struct {
 }
 
-func (m *mockEventStoreReader) GetLastEvent(id string, c context.Context) (eventstore.Event, error) {
+func (m *mockEventStoreReader) GetLastEvent(id string, c context.Context) (*Event, error) {
 	switch id {
 	case "no events":
-		return eventstore.Event{}, nil
+		return &Event{}, nil
 	case "call error":
-		return eventstore.Event{}, errors.New("some error")
+		return &Event{}, errors.New("some error")
 	default:
-		return eventstore.Event{
+		return &Event{
 			Id:      id,
 			Version: 2,
 			Entity:  "test",
 			Action:  "test",
 			Created: time.Date(2000, 3, 15, 0, 0, 0, 0, time.UTC),
-			Data:    []byte("test"),
+			Payload: []byte("test"),
 		}, nil
 	}
 }
 
-func (m *mockEventStoreReader) GetEvents(id string, v int, c context.Context) ([]eventstore.Event, error) {
+func (m *mockEventStoreReader) GetEvents(id string, v int, c context.Context) (*[]Event, error) {
 	switch id {
 	case "no events":
 		return nil, nil
 	case "call error":
 		return nil, errors.New("some error")
 	default:
-		return []eventstore.Event{
+		return &[]Event{
 			{
 				Id:      id,
 				Version: 1,
 				Entity:  "test",
 				Action:  "test",
 				Created: time.Date(2000, 3, 15, 0, 0, 0, 0, time.UTC),
-				Data:    []byte("test"),
+				Payload: []byte("test"),
 			},
 		}, nil
 	}
@@ -63,7 +64,7 @@ func (m *mockEventStoreReader) GetEvents(id string, v int, c context.Context) ([
 type mockEventStoreWriter struct {
 }
 
-func (m *mockEventStoreWriter) AppendLastEvent(e eventstore.Event, c context.Context) error {
+func (m *mockEventStoreWriter) AppendLastEvent(e *Event, c context.Context) error {
 	switch e.Id {
 	case "call error":
 		return errors.New("some error")
@@ -72,7 +73,7 @@ func (m *mockEventStoreWriter) AppendLastEvent(e eventstore.Event, c context.Con
 	}
 }
 
-func (m *mockEventStoreWriter) UpdateLastEvent(e eventstore.Event, c context.Context) error {
+func (m *mockEventStoreWriter) UpdateLastEvent(e *Event, c context.Context) error {
 	switch e.Id {
 	case "call error":
 		return errors.New("some error")
@@ -81,7 +82,7 @@ func (m *mockEventStoreWriter) UpdateLastEvent(e eventstore.Event, c context.Con
 	}
 }
 
-func (m *mockEventStoreWriter) AppendEvent(e eventstore.Event, c context.Context) error {
+func (m *mockEventStoreWriter) AppendEvent(e *Event, c context.Context) error {
 	switch e.Id {
 	case "call error":
 		return errors.New("some error")
@@ -90,18 +91,18 @@ func (m *mockEventStoreWriter) AppendEvent(e eventstore.Event, c context.Context
 	}
 }
 
-func CreateEventStore() *eventstore.EventStore {
-	return eventstore.NewEventStore(&mockEventStoreReader{}, &mockEventStoreWriter{}, &mockTimer{})
+func CreateEventStore() *EventStore {
+	return NewEventStore(&mockEventStoreReader{}, &mockEventStoreWriter{}, &mockTimer{})
 }
 
-func CreatedEvent(id string, version int) eventstore.Event {
-	return eventstore.Event{
+func CreatedEvent(id string, version int) *Event {
+	return &Event{
 		Id:      id,
 		Version: version,
 		Entity:  "test",
 		Action:  "test",
 		Created: time.Date(2000, 3, 15, 0, 0, 0, 0, time.UTC),
-		Data:    []byte("test"),
+		Payload: []byte("test"),
 	}
 }
 
@@ -113,7 +114,7 @@ func TestFirstEventSuccess(t *testing.T) {
 	event := CreatedEvent("no events", 1)
 
 	// append the event
-	err := es.Append(event, context.Background())
+	err := es.Publish(event, context.Background())
 	if err != nil {
 		t.Error(err)
 	}
@@ -127,7 +128,7 @@ func TestSecondEventSuccess(t *testing.T) {
 	event := CreatedEvent("id", 3)
 
 	// append the event
-	err := es.Append(event, context.Background())
+	err := es.Publish(event, context.Background())
 	if err != nil {
 		t.Error(err)
 	}
@@ -141,7 +142,7 @@ func TestAppendFailure(t *testing.T) {
 	event := CreatedEvent("call error", 2)
 
 	// append the event
-	err := es.Append(event, context.Background())
+	err := es.Publish(event, context.Background())
 	if err == nil {
 		t.Error("expected an error")
 	}
@@ -155,11 +156,11 @@ func TestAppendVersionMismatch(t *testing.T) {
 	event := CreatedEvent("id", 4)
 
 	// append the event
-	err := es.Append(event, context.Background())
+	err := es.Publish(event, context.Background())
 	if err == nil {
 		t.Error("expected an error")
 	}
-	if condition := err.Error(); condition != "version mismatch" {
+	if condition := err.Error(); condition != "Invalid version" {
 		t.Errorf("expected version mismatch, got %s", condition)
 	}
 }
@@ -169,12 +170,12 @@ func TestLoadEventsSuccess(t *testing.T) {
 	es := CreateEventStore()
 
 	// load events
-	events, err := es.GetEvents("id", 0, context.Background())
+	events, err := es.LoadEvents("id", 0, context.Background())
 	if err != nil {
 		t.Error(err)
 	}
 
-	if len(events) != 2 {
+	if len(*events) != 2 {
 		t.Error("expected 1 event")
 	}
 }
@@ -184,7 +185,7 @@ func TestLoadEventsFailure(t *testing.T) {
 	es := CreateEventStore()
 
 	// load events
-	_, err := es.GetEvents("call error", 0, context.Background())
+	_, err := es.LoadEvents("call error", 0, context.Background())
 	if err == nil {
 		t.Error("expected an error")
 	}
