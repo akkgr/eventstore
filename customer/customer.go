@@ -29,7 +29,7 @@ type CustomerUpdatedEvent struct {
 	properties.Data
 }
 
-func (c *Customer) customerCreated(e core.Event) error {
+func (c *Customer) customerCreated(e *core.Event) error {
 	var payload CustomerCreatedEvent
 	if err := json.Unmarshal(e.Payload, &payload); err != nil {
 		return err
@@ -40,7 +40,7 @@ func (c *Customer) customerCreated(e core.Event) error {
 	return nil
 }
 
-func (c *Customer) customerUpdated(e core.Event) error {
+func (c *Customer) customerUpdated(e *core.Event) error {
 	var payload CustomerUpdatedEvent
 	if err := json.Unmarshal(e.Payload, &payload); err != nil {
 		return err
@@ -52,7 +52,7 @@ func (c *Customer) customerUpdated(e core.Event) error {
 	return nil
 }
 
-func (c *Customer) Apply(e core.Event) error {
+func (c *Customer) Apply(e *core.Event) error {
 
 	if err := c.SetVersion(e.Version); err != nil {
 		return err

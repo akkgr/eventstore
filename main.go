@@ -79,7 +79,7 @@ func main() {
 	// construct the customer from the events
 	c := customer.Customer{}
 	for _, e := range *events {
-		c.Apply(e)
+		c.Apply(&e)
 	}
 	prettyPrint(c)
 }

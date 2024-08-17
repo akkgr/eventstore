@@ -3,7 +3,7 @@ package core
 import "github.com/akkgr/eventstore/properties"
 
 type Aggregate interface {
-	Apply(event any) error
+	Apply(e *Event) error
 }
 
 type AggregateBase struct {
