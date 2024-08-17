@@ -41,6 +41,7 @@ func NewEventStore(r EventStoreReader, w EventStoreWriter, t core.Timer) *EventS
 }
 
 func (es *EventStore) Publish(e *core.Event, c context.Context) error {
+	e.Created = es.timer.Now()
 	a, err := es.reader.GetLastEvent(e.Id, c)
 	if err != nil {
 		return err
